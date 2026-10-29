@@ -1,0 +1,76 @@
+volumes:
+    uploads:
+        driver: local
+    logs:
+        driver: local
+    mysql57:
+        driver: local
+
+networks:
+    app_net:
+    db_net:
+
+services:
+    sqlscript:
+        image: jekkos/opensourcepos:sqlscript
+        command: /bin/sh -c 'exit 0'
+    ospos:
+        image: jekkos/opensourcepos:3.3.9
+        restart: always
+        depends_on:
+          - mysql
+        ports:
+          - "8080:80"
+        networks:
+          - app_net
+          - db_net
+        volumes:
+          - uploads:/app/public/uploads
+          - logs:/app/application/logs
+        environment:
+          - CI_ENV=production
+          - FORCE_HTTPS=false
+          - PHP_TIMEZONE=${PHP_TIMEZONE:-Asia/Makassar}
+          - MYSQL_USERNAME=${MYSQL_USERNAME:-admin}
+          - MYSQL_PASSWORD=${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+          - MYSQL_DB_NAME=${MYSQL_DB_NAME:-ospos}
+          - MYSQL_HOST_NAME=${MYSQL_HOST_NAME:-mysql}
+
+    mysql:
+        image: mysql:5.7
+        container_name: mysql
+        restart: always
+        expose:
+          - "3306"
+        networks:
+          - db_net
+        volumes_from:
+          - sqlscript
+        volumes:
+          - mysql57:/var/lib/mysql:rw
+        environment:
+          - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+          - MYSQL_DATABASE=${MYSQL_DB_NAME:-ospos}
+          - MYSQL_USER=${MYSQL_USERNAME:-admin}
+          - MYSQL_PASSWORD=${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+        healthcheck:
+          test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD}"]
+          interval: 10s
+          timeout: 5s
+          retries: 10
+
+    phpmyadmin:
+        image: phpmyadmin:5.2
+        container_name: ospos-phpmyadmin
+        restart: unless-stopped
+        depends_on:
+          - mysql
+        ports:
+          - "8081:80"
+        networks:
+          - app_net
+          - db_net
+        environment:
+          - PMA_HOST=mysql
+          - PMA_PORT=3306
+          - PMA_ARBITRARY=0
